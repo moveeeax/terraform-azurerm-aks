@@ -4,7 +4,7 @@ terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = ">= 3.0"
+      version = ">= 4.0, < 5.0"
     }
   }
 }
@@ -26,6 +26,9 @@ module "aks" {
     vm_size    = "Standard_D2s_v5"
     node_count = 2
   }
+
+  # Documentation range (RFC 5737) standing in for your own egress addresses.
+  api_server_authorized_ip_ranges = ["198.51.100.0/24"]
 
   tags = {
     Environment = "sandbox"
