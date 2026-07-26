@@ -22,9 +22,14 @@ resource "azurerm_kubernetes_cluster" "this" {
   disk_encryption_set_id = var.disk_encryption_set_id
 
   default_node_pool {
-    name                    = var.default_node_pool.name
-    vm_size                 = var.default_node_pool.vm_size
-    node_count              = var.default_node_pool.node_count
+    name    = var.default_node_pool.name
+    vm_size = var.default_node_pool.vm_size
+
+    # node_count is only meaningful when autoscaling is off. When it's on, leave
+    # it unset so the provider seeds the pool from min_count and treats the
+    # field as computed from then on, instead of fighting the autoscaler on
+    # every subsequent apply (see the variable description for node_count).
+    node_count              = var.default_node_pool.auto_scaling_enabled ? null : var.default_node_pool.node_count
     auto_scaling_enabled    = var.default_node_pool.auto_scaling_enabled
     min_count               = var.default_node_pool.auto_scaling_enabled ? var.default_node_pool.min_count : null
     max_count               = var.default_node_pool.auto_scaling_enabled ? var.default_node_pool.max_count : null

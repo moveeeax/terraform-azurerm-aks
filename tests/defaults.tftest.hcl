@@ -147,6 +147,19 @@ run "rejects_invalid_network_policy" {
   expect_failures = [var.network_policy]
 }
 
+run "rejects_cilium_network_policy" {
+  command = plan
+
+  variables {
+    network_policy = "cilium"
+  }
+
+  # cilium needs network_data_plane / network_plugin_mode / pod_subnet_id,
+  # none of which this module exposes, so it is rejected rather than left to
+  # fail against the real Azure API on every apply.
+  expect_failures = [var.network_policy]
+}
+
 run "rejects_invalid_sku_tier" {
   command = plan
 
@@ -181,6 +194,42 @@ run "rejects_min_count_above_max_count" {
   }
 
   expect_failures = [var.default_node_pool]
+}
+
+run "autoscaling_leaves_node_count_for_the_provider_to_manage" {
+  variables {
+    default_node_pool = {
+      node_count           = 9
+      auto_scaling_enabled = true
+      min_count            = 2
+      max_count            = 5
+    }
+  }
+
+  # The mock provider fills unset Optional+Computed int attributes with its own
+  # placeholder rather than preserving a literal null, so we can't assert
+  # `== null` here. What we *can* assert is that our configured node_count (9)
+  # was not forced through to the resource: "node_count_resize_still_works..."
+  # below proves the mock provider echoes an explicitly-set value back
+  # unchanged, so seeing anything other than 9 here proves the module omitted
+  # node_count from the resource config once autoscaling is on.
+  assert {
+    condition     = azurerm_kubernetes_cluster.this.default_node_pool[0].node_count != 9
+    error_message = "node_count must not be forced through once autoscaling is enabled, otherwise the next apply after the autoscaler resizes the pool fails against the real provider."
+  }
+}
+
+run "node_count_resize_still_works_without_autoscaling" {
+  variables {
+    default_node_pool = {
+      node_count = 3
+    }
+  }
+
+  assert {
+    condition     = azurerm_kubernetes_cluster.this.default_node_pool[0].node_count == 3
+    error_message = "node_count must still be applied when autoscaling is off, otherwise resizing a static pool through this module stops working."
+  }
 }
 
 run "encryption_knobs_are_wired_through" {

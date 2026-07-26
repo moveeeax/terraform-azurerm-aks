@@ -38,8 +38,15 @@ variable "sku_tier" {
 variable "default_node_pool" {
   description = "Configuration of the default (system) node pool."
   type = object({
-    name                 = optional(string, "default")
-    vm_size              = optional(string, "Standard_D2s_v5")
+    name    = optional(string, "default")
+    vm_size = optional(string, "Standard_D2s_v5")
+
+    # Only used when auto_scaling_enabled = false. When auto_scaling_enabled is
+    # true this value is ignored (see main.tf): the azurerm provider seeds the
+    # initial node count from min_count instead and treats node_count as
+    # computed afterwards, so continuing to pass a fixed value here would make
+    # every apply after the autoscaler first resizes the pool fail with
+    # "cannot change node_count when auto_scaling_enabled is set to true".
     node_count           = optional(number, 2)
     auto_scaling_enabled = optional(bool, false)
     min_count            = optional(number, null)
@@ -84,16 +91,22 @@ variable "network_plugin" {
 
 variable "network_policy" {
   description = <<-EOT
-    Network policy engine enforcing pod-to-pod traffic rules. One of azure, calico
-    or cilium, or null to run the cluster with no policy enforcement at all.
+    Network policy engine enforcing pod-to-pod traffic rules. One of azure or
+    calico, or null to run the cluster with no policy enforcement at all.
     Defaults to azure, which requires network_plugin = "azure".
+
+    "cilium" is intentionally not accepted: the azurerm provider also requires
+    network_data_plane = "cilium" plus either network_plugin_mode = "overlay" or
+    a pod_subnet_id whenever network_policy = "cilium", and this module exposes
+    none of those. Passing "cilium" through would validate here and then fail
+    against the real Azure API on every apply.
   EOT
   type        = string
   default     = "azure"
 
   validation {
-    condition     = var.network_policy == null ? true : contains(["azure", "calico", "cilium"], var.network_policy)
-    error_message = "network_policy must be one of azure, calico, cilium or null."
+    condition     = var.network_policy == null ? true : contains(["azure", "calico"], var.network_policy)
+    error_message = "network_policy must be one of azure, calico or null. cilium is not supported by this module (see the variable description)."
   }
 }
 
