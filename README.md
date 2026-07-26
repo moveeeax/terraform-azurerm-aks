@@ -78,7 +78,7 @@ of the module.
 | `sku_tier`                                        | SLA tier of the control plane. One of `Free`, `Standard` or `Premium`.                          | `string`       | `"Free"`  |    no    |
 | `default_node_pool`                               | Configuration of the default (system) node pool. See below.                                     | `object`       | `{}`      |    no    |
 | `network_plugin`                                  | Network plugin. One of `azure`, `kubenet` or `none`.                                            | `string`       | `"azure"` |    no    |
-| `network_policy`                                  | Policy engine enforcing pod-to-pod rules. One of `azure`, `calico`, `cilium`, or `null` to disable. | `string`       | `"azure"` |    no    |
+| `network_policy`                                  | Policy engine enforcing pod-to-pod rules. One of `azure`, `calico`, or `null` to disable. `cilium` is not supported (see variable description). | `string`       | `"azure"` |    no    |
 | `api_server_authorized_ip_ranges`                 | CIDRs allowed to reach the public API server. `null` means unrestricted. `0.0.0.0/0` is rejected. | `list(string)` | `null`    |    no    |
 | `azure_active_directory_role_based_access_control` | AKS-managed Entra ID integration (`tenant_id`, `admin_group_object_ids`, `azure_rbac_enabled`).  | `object`       | `null`    |    no    |
 | `local_account_disabled`                          | Disable the local admin account. `null` derives it from the Entra ID setting above.              | `bool`         | `null`    |    no    |
@@ -91,7 +91,7 @@ of the module.
 |---------------------------|----------------|----------------------|-------------------------------------------------------------------|
 | `name`                    | `string`       | `"default"`          | Node pool name.                                                   |
 | `vm_size`                 | `string`       | `"Standard_D2s_v5"`  | VM SKU for the nodes.                                             |
-| `node_count`              | `number`       | `2`                  | Node count when autoscaling is off.                               |
+| `node_count`              | `number`       | `2`                  | Initial node count. Only applied when `auto_scaling_enabled = false`; ignored (left for the provider to manage from `min_count`) once autoscaling is on. |
 | `auto_scaling_enabled`    | `bool`         | `false`              | Enable the cluster autoscaler. Requires `min_count` and `max_count`. |
 | `min_count`               | `number`       | `null`               | Autoscaler lower bound.                                           |
 | `max_count`               | `number`       | `null`               | Autoscaler upper bound.                                           |
