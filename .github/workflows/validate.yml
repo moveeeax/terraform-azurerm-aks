@@ -5,15 +5,19 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: opentofu/setup-opentofu@v1
+      - uses: opentofu/setup-opentofu@v2
         with:
           tofu_wrapper: false
+          tofu_version: 1.13.8
 
       - name: fmt
         run: tofu fmt -check -recursive
@@ -32,3 +36,48 @@ jobs:
         run: |
           tofu init -backend=false
           tofu validate
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: terraform-linters/setup-tflint@v6
+        with:
+          tflint_version: v0.65.0
+
+      - name: tflint
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          tflint --init
+          tflint --recursive
+
+  # The module claims a minimum azurerm version. Prove it, so an argument that
+  # only exists in a newer provider cannot silently break consumers who resolve
+  # the floor of the constraint.
+  minimum-provider:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: opentofu/setup-opentofu@v2
+        with:
+          tofu_wrapper: false
+          tofu_version: 1.13.8
+
+      - name: pin azurerm to the declared minimum and validate
+        run: |
+          cat > override.tf <<'EOF'
+          terraform {
+            required_providers {
+              azurerm = {
+                source  = "hashicorp/azurerm"
+                version = "4.57.0"
+              }
+            }
+          }
+          EOF
+          tofu init -backend=false -upgrade
+          tofu validate
+          tofu test

@@ -160,6 +160,28 @@ variable "local_account_disabled" {
   default     = null
 }
 
+variable "oidc_issuer_enabled" {
+  description = <<-EOT
+    Whether to enable the cluster's OIDC issuer (needed for Microsoft Entra
+    Workload ID). Defaults to false, the behaviour of azurerm 4.x, so upgrading
+    the provider does not change existing clusters. Once enabled it cannot be
+    disabled again without recreating the cluster.
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "node_provisioning_mode" {
+  description = "Node provisioning mode. Manual (the default) keeps node pools as declared; Auto enables node auto-provisioning."
+  type        = string
+  default     = "Manual"
+
+  validation {
+    condition     = contains(["Manual", "Auto"], var.node_provisioning_mode)
+    error_message = "node_provisioning_mode must be either Manual or Auto."
+  }
+}
+
 variable "disk_encryption_set_id" {
   description = <<-EOT
     ID of a Disk Encryption Set used to encrypt the node OS and data disks with a

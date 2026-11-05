@@ -21,6 +21,17 @@ resource "azurerm_kubernetes_cluster" "this" {
   local_account_disabled = local.local_account_disabled
   disk_encryption_set_id = var.disk_encryption_set_id
 
+  # azurerm 5.0 flipped the provider default to true. Set it explicitly so the
+  # result does not depend on which provider major resolves.
+  oidc_issuer_enabled = var.oidc_issuer_enabled
+
+  # Required from azurerm 5.0 (available since 4.57.0). "Manual" is the AKS
+  # default and keeps node pools under the module's control; "Auto" turns on
+  # node auto-provisioning (Karpenter).
+  node_provisioning_profile {
+    mode = var.node_provisioning_mode
+  }
+
   default_node_pool {
     name    = var.default_node_pool.name
     vm_size = var.default_node_pool.vm_size

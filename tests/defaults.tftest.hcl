@@ -250,3 +250,25 @@ run "encryption_knobs_are_wired_through" {
     error_message = "disk_encryption_set_id should reach the cluster."
   }
 }
+
+run "provider_major_independent_defaults" {
+  assert {
+    condition     = azurerm_kubernetes_cluster.this.oidc_issuer_enabled == false
+    error_message = "oidc_issuer_enabled must be set explicitly so azurerm 4.x and 5.x produce the same cluster."
+  }
+
+  assert {
+    condition     = azurerm_kubernetes_cluster.this.node_provisioning_profile[0].mode == "Manual"
+    error_message = "node_provisioning_profile must default to Manual mode."
+  }
+}
+
+run "rejects_unknown_node_provisioning_mode" {
+  command = plan
+
+  variables {
+    node_provisioning_mode = "Karpenter"
+  }
+
+  expect_failures = [var.node_provisioning_mode]
+}
