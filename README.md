@@ -9,7 +9,7 @@ exposes the API server FQDN and a sensitive kubeconfig output.
 
 ```hcl
 module "aks" {
-  source = "github.com/moveeeax/terraform-azurerm-aks"
+  source = "github.com/moveeeax/terraform-azurerm-aks?ref=v1.0.0"
 
   name                = "prod-aks"
   resource_group_name = "prod-rg"
@@ -56,11 +56,18 @@ A runnable example lives in [`examples/basic`](examples/basic).
 | Name      | Version           |
 |-----------|-------------------|
 | terraform | >= 1.5            |
-| azurerm   | >= 4.0, < 5.0     |
+| azurerm   | >= 4.57.0, < 6.0  |
 
-The azurerm constraint is `>= 4.0` because the module uses the 4.x argument
-names (`auto_scaling_enabled`, `host_encryption_enabled`), which do not exist in
-the 3.x provider.
+The lower bound is `4.57.0` because that release added the
+`node_provisioning_profile` block, which azurerm 5.0 makes required. (The module
+also uses the 4.x argument names `auto_scaling_enabled` and
+`host_encryption_enabled`, which do not exist in 3.x.) CI validates and tests the
+module against both the declared minimum and the latest 5.x release. azurerm 6.x
+is excluded until it has been tested.
+
+azurerm 5.0 changed the provider default of `oidc_issuer_enabled` to `true`. The
+module sets it explicitly (`oidc_issuer_enabled`, default `false`), so moving an
+existing cluster from azurerm 4.x to 5.x does not change it.
 
 Running `terraform test` additionally requires Terraform / OpenTofu >= 1.7 for
 `mock_provider`. That is a test-only requirement and does not apply to consumers
@@ -82,6 +89,8 @@ of the module.
 | `api_server_authorized_ip_ranges`                 | CIDRs allowed to reach the public API server. `null` means unrestricted. `0.0.0.0/0` is rejected. | `list(string)` | `null`    |    no    |
 | `azure_active_directory_role_based_access_control` | AKS-managed Entra ID integration (`tenant_id`, `admin_group_object_ids`, `azure_rbac_enabled`).  | `object`       | `null`    |    no    |
 | `local_account_disabled`                          | Disable the local admin account. `null` derives it from the Entra ID setting above.              | `bool`         | `null`    |    no    |
+| `oidc_issuer_enabled`                             | Enable the OIDC issuer (Entra Workload ID). Cannot be turned off again without recreating the cluster. | `bool`         | `false`   |    no    |
+| `node_provisioning_mode`                          | `node_provisioning_profile.mode`: `Manual` or `Auto` (node auto-provisioning).                  | `string`       | `"Manual"` |    no    |
 | `disk_encryption_set_id`                          | Disk Encryption Set for customer-managed key encryption of node disks.                          | `string`       | `null`    |    no    |
 | `tags`                                            | Map of tags applied to the cluster.                                                             | `map(string)`  | `{}`      |    no    |
 
@@ -101,7 +110,7 @@ of the module.
 ## Tests
 
 ```sh
-terraform test
+terraform test   # or: tofu test
 ```
 
 The suite in [`tests/`](tests) runs against a mocked azurerm provider, so it
