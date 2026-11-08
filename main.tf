@@ -25,6 +25,12 @@ resource "azurerm_kubernetes_cluster" "this" {
   # result does not depend on which provider major resolves.
   oidc_issuer_enabled = var.oidc_issuer_enabled
 
+  # Turns on the AKS workload identity webhook, which projects a federated
+  # service account token into pods. Changing it is an in-place update in both
+  # directions; the cluster-level requirement on the OIDC issuer is enforced by
+  # a precondition below.
+  workload_identity_enabled = var.workload_identity_enabled
+
   # Required from azurerm 5.0 (available since 4.57.0). "Manual" is the AKS
   # default and keeps node pools under the module's control; "Auto" turns on
   # node auto-provisioning (Karpenter).
@@ -94,5 +100,34 @@ resource "azurerm_kubernetes_cluster" "this" {
       condition     = !local.local_account_disabled || var.azure_active_directory_role_based_access_control != null
       error_message = "local_account_disabled = true requires azure_active_directory_role_based_access_control to be configured, otherwise nobody could authenticate to the cluster."
     }
+
+    # The provider only checks this on create, and only after Azure has been
+    # called; an update that enables workload identity on a cluster without an
+    # issuer goes straight to the API. Fail at plan time instead.
+    precondition {
+      condition     = !var.workload_identity_enabled || var.oidc_issuer_enabled
+      error_message = "workload_identity_enabled = true requires oidc_issuer_enabled = true."
+    }
+
+    # A federated credential trusts tokens from the cluster's OIDC issuer, and
+    # pods only receive such tokens when the workload identity webhook is on.
+    precondition {
+      condition     = length(var.federated_identities) == 0 || var.workload_identity_enabled
+      error_message = "federated_identities requires workload_identity_enabled = true (which in turn requires oidc_issuer_enabled = true)."
+    }
   }
+}
+
+# Trust between a Kubernetes service account and a user-assigned managed
+# identity. A pod running as system:serviceaccount:<namespace>:<service_account>
+# with the azure.workload.identity/use label can then exchange its projected
+# token for an Entra ID token of that identity.
+resource "azurerm_federated_identity_credential" "this" {
+  for_each = var.federated_identities
+
+  name                      = each.key
+  user_assigned_identity_id = each.value.identity_id
+  audience                  = each.value.audience
+  issuer                    = azurerm_kubernetes_cluster.this.oidc_issuer_url
+  subject                   = "system:serviceaccount:${each.value.namespace}:${each.value.service_account}"
 }

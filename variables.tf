@@ -165,10 +165,68 @@ variable "oidc_issuer_enabled" {
     Whether to enable the cluster's OIDC issuer (needed for Microsoft Entra
     Workload ID). Defaults to false, the behaviour of azurerm 4.x, so upgrading
     the provider does not change existing clusters. Once enabled it cannot be
-    disabled again without recreating the cluster.
+    disabled again without recreating the cluster: azurerm 5.x plans a replace
+    for true -> false, azurerm 4.x sends an in-place update that AKS rejects.
   EOT
   type        = bool
   default     = false
+}
+
+variable "workload_identity_enabled" {
+  description = <<-EOT
+    Whether to enable Microsoft Entra Workload ID, so pods can authenticate as a
+    user-assigned managed identity through a federated credential. Requires
+    oidc_issuer_enabled = true. Defaults to false; can be switched either way
+    in place.
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "federated_identities" {
+  description = <<-EOT
+    Federated identity credentials to create against the cluster's OIDC issuer,
+    keyed by credential name. Each entry trusts the Kubernetes service account
+    namespace/service_account to act as the user-assigned identity identity_id.
+    audience defaults to the Entra ID token exchange audience. Requires
+    workload_identity_enabled = true.
+  EOT
+  type = map(object({
+    identity_id     = string
+    namespace       = string
+    service_account = string
+    audience        = optional(list(string), ["api://AzureADTokenExchange"])
+  }))
+  default = {}
+
+  validation {
+    condition = alltrue([
+      for k, v in var.federated_identities : can(regex("^[A-Za-z0-9][A-Za-z0-9_-]{2,119}$", k))
+    ])
+    error_message = "Each federated_identities key is used as the credential name: 3-120 characters, letters, digits, hyphens and underscores, starting with a letter or digit."
+  }
+
+  validation {
+    condition = alltrue([
+      for v in values(var.federated_identities) : can(regex("(?i)^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\\.ManagedIdentity/userAssignedIdentities/[^/]+$", v.identity_id))
+    ])
+    error_message = "Each federated_identities identity_id must be a user-assigned identity resource ID (/subscriptions/.../resourceGroups/.../providers/Microsoft.ManagedIdentity/userAssignedIdentities/...)."
+  }
+
+  validation {
+    condition = alltrue([
+      for v in values(var.federated_identities) : v.namespace != "" && v.service_account != ""
+    ])
+    error_message = "Each federated_identities entry needs a non-empty namespace and service_account."
+  }
+
+  # The provider caps audience at one item (MaxItems = 1).
+  validation {
+    condition = alltrue([
+      for v in values(var.federated_identities) : length(v.audience) == 1
+    ])
+    error_message = "Each federated_identities audience must contain exactly one value."
+  }
 }
 
 variable "node_provisioning_mode" {
