@@ -23,3 +23,13 @@ output "identity_principal_id" {
   description = "Principal ID of the cluster's system-assigned managed identity."
   value       = azurerm_kubernetes_cluster.this.identity[0].principal_id
 }
+
+output "oidc_issuer_url" {
+  description = "URL of the cluster's OIDC issuer, or null when oidc_issuer_enabled is false."
+  value       = azurerm_kubernetes_cluster.this.oidc_issuer_url
+}
+
+output "federated_identity_credential_ids" {
+  description = "IDs of the federated identity credentials, keyed like federated_identities."
+  value       = { for k, v in azurerm_federated_identity_credential.this : k => v.id }
+}

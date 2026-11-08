@@ -51,15 +51,61 @@ A runnable example lives in [`examples/basic`](examples/basic).
 | Disk encryption | Node disks are encrypted at rest with platform-managed keys by default. `disk_encryption_set_id` switches to a customer-managed key; `default_node_pool.host_encryption_enabled` additionally encrypts the temp disk and host caches (needs the `EncryptionAtHost` subscription feature). |
 | Kubernetes version | `kubernetes_version` defaults to `null`, which tracks the region's AKS default rather than pinning a version that will silently fall out of support. Pin it explicitly once you have an upgrade process. |
 
+## Workload identity
+
+Off by default. To let pods authenticate as a user-assigned managed identity,
+turn on the OIDC issuer and workload identity and list the service accounts to
+trust:
+
+```hcl
+oidc_issuer_enabled       = true
+workload_identity_enabled = true
+
+federated_identities = {
+  # Key = credential name: 3-120 characters, letters, digits, - and _.
+  app-backend = {
+    identity_id     = azurerm_user_assigned_identity.backend.id
+    namespace       = "apps"
+    service_account = "backend"
+    # audience defaults to ["api://AzureADTokenExchange"]
+  }
+}
+```
+
+Each entry creates an `azurerm_federated_identity_credential` with issuer
+`oidc_issuer_url` and subject `system:serviceaccount:<namespace>:<service_account>`.
+The service account still needs the `azure.workload.identity/client-id`
+annotation, and the pods the `azure.workload.identity/use: "true"` label.
+Entra ID allows at most 20 federated credentials per identity.
+
+`workload_identity_enabled = true` without `oidc_issuer_enabled = true`, and
+`federated_identities` without `workload_identity_enabled = true`, are rejected
+at plan time.
+
+What changing these does to an existing cluster, per the azurerm source
+(`kubernetes_cluster` resource, v4.65.0 and v5.13.0):
+
+| Change | azurerm 4.x | azurerm 5.x |
+|--------|-------------|-------------|
+| `oidc_issuer_enabled` false -> true | in-place update | in-place update |
+| `oidc_issuer_enabled` true -> false | in-place update that AKS rejects | cluster is replaced (`ForceNewIfChange`) |
+| `workload_identity_enabled` either way | in-place update | in-place update |
+
+So enabling the issuer is a one-way step. Recommended for new clusters:
+`oidc_issuer_enabled = true` and `workload_identity_enabled = true`.
+
 ## Requirements
 
 | Name      | Version           |
 |-----------|-------------------|
 | terraform | >= 1.5            |
-| azurerm   | >= 4.57.0, < 6.0  |
+| azurerm   | >= 4.65.0, < 6.0  |
 
-The lower bound is `4.57.0` because that release added the
-`node_provisioning_profile` block, which azurerm 5.0 makes required. (The module
+The lower bound is `4.65.0` because that release added
+`user_assigned_identity_id` to `azurerm_federated_identity_credential` (renamed
+from `parent_id`, which 5.0 removes), so it is the first version where the same
+configuration works on 4.x and 5.x. `node_provisioning_profile`, which azurerm
+5.0 makes required, has been there since 4.57.0. (The module
 also uses the 4.x argument names `auto_scaling_enabled` and
 `host_encryption_enabled`, which do not exist in 3.x.) CI validates and tests the
 module against both the declared minimum and the latest 5.x release. azurerm 6.x
@@ -90,6 +136,8 @@ of the module.
 | `azure_active_directory_role_based_access_control` | AKS-managed Entra ID integration (`tenant_id`, `admin_group_object_ids`, `azure_rbac_enabled`).  | `object`       | `null`    |    no    |
 | `local_account_disabled`                          | Disable the local admin account. `null` derives it from the Entra ID setting above.              | `bool`         | `null`    |    no    |
 | `oidc_issuer_enabled`                             | Enable the OIDC issuer (Entra Workload ID). Cannot be turned off again without recreating the cluster. | `bool`         | `false`   |    no    |
+| `workload_identity_enabled`                       | Enable Microsoft Entra Workload ID. Requires `oidc_issuer_enabled = true`. In-place either way. | `bool`         | `false`   |    no    |
+| `federated_identities`                            | Federated credentials keyed by name: `identity_id`, `namespace`, `service_account`, optional `audience`. Requires `workload_identity_enabled`. | `map(object)`  | `{}`      |    no    |
 | `node_provisioning_mode`                          | `node_provisioning_profile.mode`: `Manual` or `Auto` (node auto-provisioning).                  | `string`       | `"Manual"` |    no    |
 | `disk_encryption_set_id`                          | Disk Encryption Set for customer-managed key encryption of node disks.                          | `string`       | `null`    |    no    |
 | `tags`                                            | Map of tags applied to the cluster.                                                             | `map(string)`  | `{}`      |    no    |
@@ -125,6 +173,8 @@ needs no Azure credentials and no network access.
 | `fqdn`                  | FQDN of the cluster's Kubernetes API server.            |
 | `kube_config_raw`       | Raw kubeconfig for the cluster (sensitive).             |
 | `identity_principal_id` | Principal ID of the cluster's managed identity.         |
+| `oidc_issuer_url`       | OIDC issuer URL, or null when the issuer is disabled.   |
+| `federated_identity_credential_ids` | Federated credential IDs, keyed like `federated_identities`. |
 
 ## License
 
